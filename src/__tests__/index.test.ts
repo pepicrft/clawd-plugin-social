@@ -250,7 +250,7 @@ describe('Social Scheduler Plugin', () => {
     it('should have comprehensive description', () => {
       expect(registeredTool.description).toContain('social media');
       expect(registeredTool.description).toContain('multiple platforms');
-      expect(registeredTool.description).toContain('Browser tool');
+      expect(registeredTool.description).toContain('cookies');
     });
   });
 });
