@@ -20,6 +20,7 @@ describe('Social Scheduler Plugin', () => {
       registerGatewayMethod: vi.fn((name, handler) => {
         registeredMethods.set(name, handler);
       }),
+      browser: vi.fn(),
     };
   });
 
@@ -50,9 +51,10 @@ describe('Social Scheduler Plugin', () => {
     it('should register gateway methods', () => {
       plugin(mockApi);
       
-      expect(mockApi.registerGatewayMethod).toHaveBeenCalledTimes(4);
+      expect(mockApi.registerGatewayMethod).toHaveBeenCalledTimes(5);
       expect(registeredMethods.has('social.draft')).toBe(true);
       expect(registeredMethods.has('social.schedule')).toBe(true);
+      expect(registeredMethods.has('social.publish')).toBe(true);
       expect(registeredMethods.has('social.list')).toBe(true);
       expect(registeredMethods.has('social.upcoming')).toBe(true);
     });
@@ -248,6 +250,7 @@ describe('Social Scheduler Plugin', () => {
     it('should have comprehensive description', () => {
       expect(registeredTool.description).toContain('social media');
       expect(registeredTool.description).toContain('multiple platforms');
+      expect(registeredTool.description).toContain('Browser tool');
     });
   });
 });

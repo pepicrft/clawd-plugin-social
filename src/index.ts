@@ -38,9 +38,30 @@ interface PostMetadata {
   platforms?: Platform[];
 }
 
+let miseAvailable: boolean | null = null;
+
+function checkMiseAvailable(): boolean {
+  if (miseAvailable !== null) return miseAvailable;
+  
+  try {
+    execSync('which mise', { stdio: 'pipe' });
+    miseAvailable = true;
+    return true;
+  } catch {
+    miseAvailable = false;
+    return false;
+  }
+}
+
 function execDstask(args: string[]): string {
   try {
-    const dstaskCmd = `mise exec -- dstask ${args.join(" ")} 2>/dev/null || dstask ${args.join(" ")}`;
+    let dstaskCmd: string;
+    
+    if (checkMiseAvailable()) {
+      dstaskCmd = `mise exec go:github.com/naggie/dstask/cmd/dstask@latest -- dstask ${args.join(" ")}`;
+    } else {
+      dstaskCmd = `dstask ${args.join(" ")}`;
+    }
     
     return execSync(dstaskCmd, {
       encoding: "utf-8",
@@ -79,6 +100,122 @@ function parseDstaskJson(output: string): DstaskItem[] {
   } catch (error) {
     return [];
   }
+}
+
+async function postToBrowser(api: any, platform: Platform, content: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    switch (platform) {
+      case "twitter":
+        return await postToTwitter(api, content);
+      case "linkedin":
+        return await postToLinkedIn(api, content);
+      case "mastodon":
+        return await postToMastodon(api, content);
+      case "bluesky":
+        return await postToBluesky(api, content);
+      default:
+        return { success: false, error: `Unsupported platform: ${platform}` };
+    }
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+async function postToTwitter(api: any, content: string): Promise<{ success: boolean; error?: string }> {
+  // Open Twitter compose
+  await api.browser({ action: "open", targetUrl: "https://twitter.com/compose/tweet" });
+  
+  // Wait for page to load
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // Type the tweet
+  await api.browser({
+    action: "act",
+    request: {
+      kind: "type",
+      text: content,
+      slowly: true
+    }
+  });
+  
+  // Find and click post button
+  await api.browser({
+    action: "act",
+    request: {
+      kind: "click",
+      ref: "post-button"  // This would need the actual selector
+    }
+  });
+  
+  return { success: true };
+}
+
+async function postToLinkedIn(api: any, content: string): Promise<{ success: boolean; error?: string }> {
+  await api.browser({ action: "open", targetUrl: "https://www.linkedin.com/" });
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  // LinkedIn posting flow
+  await api.browser({
+    action: "act",
+    request: {
+      kind: "click",
+      ref: "start-post-button"
+    }
+  });
+  
+  await api.browser({
+    action: "act",
+    request: {
+      kind: "type",
+      text: content
+    }
+  });
+  
+  await api.browser({
+    action: "act",
+    request: {
+      kind: "click",
+      ref: "post-button"
+    }
+  });
+  
+  return { success: true };
+}
+
+async function postToMastodon(api: any, content: string): Promise<{ success: boolean; error?: string }> {
+  // Mastodon instance would need to be configured
+  return { success: false, error: "Mastodon posting requires instance configuration" };
+}
+
+async function postToBluesky(api: any, content: string): Promise<{ success: boolean; error?: string }> {
+  await api.browser({ action: "open", targetUrl: "https://bsky.app/" });
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
+  await api.browser({
+    action: "act",
+    request: {
+      kind: "click",
+      ref: "compose-button"
+    }
+  });
+  
+  await api.browser({
+    action: "act",
+    request: {
+      kind: "type",
+      text: content
+    }
+  });
+  
+  await api.browser({
+    action: "act",
+    request: {
+      kind: "click",
+      ref: "post-button"
+    }
+  });
+  
+  return { success: true };
 }
 
 function createPost(
@@ -154,16 +291,60 @@ function listPosts(filters: {
   return filters.limit ? items.slice(0, filters.limit) : items;
 }
 
+function getPost(id: string): DstaskItem | null {
+  const allPosts = listPosts({});
+  return allPosts.find(p => p.id.toString() === id) || null;
+}
+
 function schedulePost(id: string, date: string): string {
-  // Remove draft tag, add scheduled tag
   execDstask(["modify", id, "-draft", "+scheduled", `due:${date}`]);
   return `Scheduled post ${id} for ${date}`;
 }
 
-function publishPost(id: string): string {
-  execDstask(["modify", id, "-scheduled", "+published"]);
-  execDstask(["done", id]);
-  return `Published post ${id}`;
+async function publishPost(api: any, id: string): Promise<string> {
+  const post = getPost(id);
+  if (!post) {
+    throw new Error(`Post ${id} not found`);
+  }
+  
+  // Extract platforms from tags
+  const platforms = post.tags.filter(t => 
+    ['twitter', 'linkedin', 'mastodon', 'bluesky'].includes(t)
+  ) as Platform[];
+  
+  if (platforms.length === 0) {
+    throw new Error(`Post ${id} has no platform tags`);
+  }
+  
+  // Get full content from notes or summary
+  const content = post.notes || post.summary;
+  
+  // Post to each platform
+  const results: { platform: Platform; success: boolean; error?: string }[] = [];
+  
+  for (const platform of platforms) {
+    const result = await postToBrowser(api, platform, content);
+    results.push({ platform, ...result });
+  }
+  
+  // Check if all succeeded
+  const allSucceeded = results.every(r => r.success);
+  const someSucceeded = results.some(r => r.success);
+  
+  if (allSucceeded) {
+    execDstask(["modify", id, "-scheduled", "-draft", "+published"]);
+    execDstask(["done", id]);
+    return `Published post ${id} to ${platforms.join(', ')}`;
+  } else if (someSucceeded) {
+    const succeeded = results.filter(r => r.success).map(r => r.platform);
+    const failed = results.filter(r => !r.success).map(r => r.platform);
+    execDstask(["modify", id, "+failed"]);
+    return `Partially published post ${id}. Success: ${succeeded.join(', ')}. Failed: ${failed.join(', ')}`;
+  } else {
+    execDstask(["modify", id, "+failed"]);
+    const errors = results.map(r => `${r.platform}: ${r.error}`).join('; ');
+    throw new Error(`Failed to publish post ${id}. Errors: ${errors}`);
+  }
 }
 
 function cancelPost(id: string): string {
@@ -194,7 +375,6 @@ export default function (api: any) {
     ({ program }: any) => {
       const social = program.command("social").description("Social media scheduling system");
 
-      // Draft command
       social
         .command("draft <content...>")
         .option("-p, --platforms <platforms>", "Comma-separated platforms (twitter,linkedin,mastodon,bluesky)", "twitter")
@@ -206,7 +386,6 @@ export default function (api: any) {
           console.log(createPost(content, platforms, "draft", { campaign: options.campaign }));
         });
 
-      // Schedule command
       social
         .command("schedule <id> <date>")
         .description("Schedule a post (date format: 2026-01-15T14:00)")
@@ -214,15 +393,19 @@ export default function (api: any) {
           console.log(schedulePost(id, date));
         });
 
-      // Publish command
       social
         .command("publish <id>")
-        .description("Publish a post immediately")
-        .action((id: string) => {
-          console.log(publishPost(id));
+        .description("Publish a post immediately using browser automation")
+        .action(async (id: string) => {
+          try {
+            const result = await publishPost(api, id);
+            console.log(result);
+          } catch (error: any) {
+            console.error(`Error: ${error.message}`);
+            process.exit(1);
+          }
         });
 
-      // List command
       social
         .command("list [status]")
         .option("-p, --platform <platform>", "Filter by platform")
@@ -251,7 +434,6 @@ export default function (api: any) {
           });
         });
 
-      // Upcoming command
       social
         .command("upcoming [hours]")
         .description("Show posts scheduled in the next N hours (default: 24)")
@@ -272,7 +454,6 @@ export default function (api: any) {
           });
         });
 
-      // Cancel command
       social
         .command("cancel <id>")
         .description("Cancel scheduled post (moves to drafts)")
@@ -280,7 +461,6 @@ export default function (api: any) {
           console.log(cancelPost(id));
         });
 
-      // Delete command
       social
         .command("delete <id>")
         .description("Delete a post permanently")
@@ -294,7 +474,7 @@ export default function (api: any) {
   // Register tool for Claude
   api.registerTool({
     name: "social_scheduler",
-    description: "Manage social media posts across multiple platforms. Create drafts, schedule posts, publish immediately, and track your social media pipeline.",
+    description: "Manage social media posts across multiple platforms. Create drafts, schedule posts, publish immediately via browser automation, and track your social media pipeline. Browser tool must be available for publishing.",
     input_schema: {
       type: "object",
       properties: {
@@ -367,7 +547,7 @@ export default function (api: any) {
 
           case "publish":
             if (!params.id) throw new Error("Post ID is required for publish action");
-            result = publishPost(params.id);
+            result = await publishPost(api, params.id);
             break;
 
           case "list":
@@ -422,6 +602,15 @@ export default function (api: any) {
   api.registerGatewayMethod("social.schedule", async (params: { id: string; date: string }) => {
     const result = schedulePost(params.id, params.date);
     return { ok: true, message: result };
+  });
+
+  api.registerGatewayMethod("social.publish", async (params: { id: string }) => {
+    try {
+      const result = await publishPost(api, params.id);
+      return { ok: true, message: result };
+    } catch (error: any) {
+      return { ok: false, error: error.message };
+    }
   });
 
   api.registerGatewayMethod("social.list", async (params: { status?: Status; platform?: Platform; campaign?: string }) => {

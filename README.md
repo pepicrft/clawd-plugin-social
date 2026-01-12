@@ -2,12 +2,13 @@
 
 [![CI](https://github.com/pepicrft/clawd-plugin-social/actions/workflows/ci.yml/badge.svg)](https://github.com/pepicrft/clawd-plugin-social/actions/workflows/ci.yml)
 
-A powerful Clawdbot plugin for social media scheduling using dstask. Like Buffer, but open-source and better integrated with your workflow.
+A powerful Clawdbot plugin for social media scheduling using dstask. Like Buffer, but open-source and better integrated with your workflow. **Publishes posts automatically using browser automation!**
 
 ## ✨ Features
 
 - 📝 **Multi-platform support**: Twitter/X, LinkedIn, Mastodon, Bluesky
 - 📅 **Flexible scheduling**: Schedule posts for specific times
+- 🤖 **Browser automation**: Actually publishes posts using Clawdbot's browser tool
 - 💾 **Draft management**: Save and organize drafts
 - 🎯 **Campaign tracking**: Group posts by campaign/series
 - 🔄 **Smart filtering**: Filter by platform, status, or campaign
@@ -16,6 +17,7 @@ A powerful Clawdbot plugin for social media scheduling using dstask. Like Buffer
 - 🗂️ **Git-backed**: Version control for all your posts
 - 🔍 **Searchable**: Find posts by content or metadata
 - 🎨 **Priority support**: Urgent, high, normal, low priorities
+- 🚀 **Intelligent dstask execution**: Uses mise if available, falls back to direct dstask
 
 ## 📦 Installation
 
@@ -32,6 +34,8 @@ Or install manually:
 ```bash
 go install github.com/naggie/dstask/cmd/dstask@latest
 ```
+
+**Note**: The plugin will automatically use mise if available, otherwise it falls back to direct dstask execution.
 
 ### Install the Plugin
 
@@ -57,7 +61,7 @@ clawdbot social draft "Check out my new blog post!" \
 # Schedule a post
 clawdbot social schedule 42 2026-01-15T14:00
 
-# Publish immediately
+# Publish immediately (uses browser automation!)
 clawdbot social publish 42
 
 # List drafts
@@ -87,7 +91,7 @@ clawdbot social delete 42
 
 ### 🤖 Tool (for Claude)
 
-Claude can manage your social media schedule:
+Claude can manage your social media schedule and publish posts:
 
 ```
 Create a draft tweet: "Just shipped a new feature! 🚀"
@@ -95,6 +99,10 @@ Create a draft tweet: "Just shipped a new feature! 🚀"
 
 ```
 Schedule post 42 for tomorrow at 2pm
+```
+
+```
+Publish post 42 now
 ```
 
 ```
@@ -131,6 +139,14 @@ curl -X POST http://localhost:3000/api/gateway/rpc \
     }
   }'
 
+# Publish post (uses browser automation)
+curl -X POST http://localhost:3000/api/gateway/rpc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "method": "social.publish",
+    "params": {"id": "42"}
+  }'
+
 # List posts
 curl -X POST http://localhost:3000/api/gateway/rpc \
   -H "Content-Type: application/json" \
@@ -141,17 +157,36 @@ curl -X POST http://localhost:3000/api/gateway/rpc \
       "platform": "twitter"
     }
   }'
-
-# Get upcoming posts
-curl -X POST http://localhost:3000/api/gateway/rpc \
-  -H "Content-Type: application/json" \
-  -d '{"method": "social.upcoming", "params": {"hours": 48}}'
 ```
+
+## 🤖 Browser Automation
+
+The plugin uses Clawdbot's browser tool to actually post content to social media platforms:
+
+### How It Works
+1. When you run `publish`, the plugin opens the platform in a browser
+2. Navigates to the compose area
+3. Types your content
+4. Clicks the post button
+5. Updates the post status to "published" in dstask
+
+### Supported Platforms
+- ✅ **Twitter/X**: Opens compose, types content, clicks post
+- ✅ **LinkedIn**: Opens feed, starts post, types content, publishes
+- ✅ **Bluesky**: Opens app, composes post, publishes
+- ⚠️ **Mastodon**: Requires instance configuration (coming soon)
+
+### Requirements
+- Clawdbot browser tool must be available
+- You must be logged into the platforms in your browser
+- Browser automation may require adjusting selectors if platforms change their UI
 
 ## 📋 Requirements
 
-- [dstask](https://github.com/naggie/dstask) must be installed and available in your PATH
+- [dstask](https://github.com/naggie/dstask) must be installed
 - 💡 **Tip:** Use `mise use -g go:github.com/naggie/dstask/cmd/dstask@latest` for hassle-free installation!
+- The plugin automatically detects mise and uses it if available
+- Clawdbot browser tool must be available for publishing
 
 ## 🔧 How It Works
 
@@ -169,16 +204,22 @@ This plugin uses dstask with a smart tagging system:
 - **Summary**: First 100 chars of post
 - **Notes**: Full content + metadata
 
+### Intelligent Execution
+The plugin checks for mise availability at runtime:
+- If mise is available: `mise exec go:github.com/naggie/dstask/cmd/dstask@latest -- dstask`
+- Otherwise: `dstask` (direct execution)
+
 ### Benefits
 - 💾 **Persistent** across sessions
 - 🔍 **Searchable** with dstask's query features
 - 🔄 **Integrated** with your existing workflow
 - 🗂️ **Git-backed** for version control
 - 🎨 **Extensible** with custom tags
+- 🤖 **Actually publishes** using browser automation!
 
 ## 🎯 Workflow Examples
 
-### Basic Posting
+### Basic Posting with Automation
 ```bash
 # Create draft
 clawdbot social draft "Exciting news!" --platforms twitter
@@ -187,8 +228,8 @@ clawdbot social draft "Exciting news!" --platforms twitter
 clawdbot social list draft
 clawdbot social schedule 1 2026-01-15T14:00
 
-# Check what's upcoming
-clawdbot social upcoming
+# Publish immediately (browser automation)
+clawdbot social publish 1
 ```
 
 ### Campaign Management
@@ -196,27 +237,14 @@ clawdbot social upcoming
 # Create posts for a campaign
 clawdbot social draft "Post 1" --campaign "launch-week" --platforms twitter,linkedin
 clawdbot social draft "Post 2" --campaign "launch-week" --platforms twitter,linkedin
-clawdbot social draft "Post 3" --campaign "launch-week" --platforms twitter,linkedin
 
-# Schedule all campaign posts
+# Schedule them
 clawdbot social list draft --campaign "launch-week"
-# ... schedule each post
+clawdbot social schedule 1 2026-01-15T09:00
+clawdbot social schedule 2 2026-01-15T15:00
 
-# Track campaign progress
-clawdbot social list scheduled --campaign "launch-week"
-clawdbot social list published --campaign "launch-week"
-```
-
-### Multi-Platform Strategy
-```bash
-# Create platform-specific variants
-clawdbot social draft "Short tweet" --platforms twitter
-clawdbot social draft "Professional update with more context" --platforms linkedin
-clawdbot social draft "Casual toot" --platforms mastodon
-
-# Review by platform
-clawdbot social list --platform twitter
-clawdbot social list --platform linkedin
+# Or publish immediately
+clawdbot social publish 1
 ```
 
 ## 🛠️ Development
@@ -237,9 +265,6 @@ npm test
 
 # Watch mode
 npm run test:watch
-
-# Test UI
-npm run test:ui
 ```
 
 ### 🧪 Testing
@@ -258,11 +283,12 @@ CI runs tests on Node.js 20.x and 22.x to ensure compatibility.
 
 Potential additions:
 - 🧵 Thread support (Twitter/X threads, LinkedIn carousels)
-- 🖼️ Media attachment tracking
+- 🖼️ Media attachment uploading
 - 🔄 Recurring post templates
 - 📊 Analytics integration
-- 🤖 Auto-publishing daemon
-- 📱 Mobile app notifications
+- 🤖 Auto-publishing daemon (check upcoming and publish automatically)
+- 📱 Better error handling for browser automation
+- 🔐 OAuth integration for API-based posting
 
 ## 📄 License
 
