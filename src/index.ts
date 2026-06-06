@@ -19,6 +19,26 @@ const STATUS_TAGS = {
 type Platform = keyof typeof PLATFORM_TAGS;
 type Status = keyof typeof STATUS_TAGS;
 
+function trimTagPrefix(tag: string): string {
+  return tag.startsWith("+") ? tag.slice(1) : tag;
+}
+
+function isPlatform(value: string): value is Platform {
+  return value in PLATFORM_TAGS;
+}
+
+function isStatus(value: string): value is Status {
+  return value in STATUS_TAGS;
+}
+
+function getPlatformsFromTags(tags: string[]): Platform[] {
+  return tags.map(trimTagPrefix).filter(isPlatform);
+}
+
+function getStatusFromTags(tags: string[]): Status | undefined {
+  return tags.map(trimTagPrefix).find(isStatus);
+}
+
 interface DstaskItem {
   uuid: string;
   status: string;
@@ -283,9 +303,7 @@ async function publishPost(api: any, id: string): Promise<string> {
     throw new Error(`Post ${id} not found`);
   }
   
-  const platforms = post.tags.filter(t => 
-    ['twitter', 'linkedin', 'mastodon', 'bluesky'].includes(t)
-  ) as Platform[];
+  const platforms = getPlatformsFromTags(post.tags);
   
   if (platforms.length === 0) {
     throw new Error(`Post ${id} has no platform tags`);
@@ -399,8 +417,8 @@ export default function (api: any) {
           
           console.log(`📱 Social Posts (${posts.length}):`);
           posts.forEach((post) => {
-            const platforms = post.tags.filter(t => t.match(/^(twitter|linkedin|mastodon|bluesky)$/));
-            const statusTag = post.tags.find(t => t.match(/^(draft|scheduled|published|failed)$/));
+            const platforms = getPlatformsFromTags(post.tags);
+            const statusTag = getStatusFromTags(post.tags);
             const due = post.due !== "0001-01-01T00:00:00Z" ? ` 📅 ${new Date(post.due).toLocaleString()}` : '';
             const campaign = post.project ? ` [${post.project}]` : '';
             console.log(`  ${post.id}. ${post.summary}`);
@@ -421,7 +439,7 @@ export default function (api: any) {
           
           console.log(`🕐 Upcoming Posts (${posts.length}):`);
           posts.forEach((post) => {
-            const platforms = post.tags.filter(t => t.match(/^(twitter|linkedin|mastodon|bluesky)$/));
+            const platforms = getPlatformsFromTags(post.tags);
             const due = new Date(post.due);
             console.log(`  ${post.id}. ${post.summary}`);
             console.log(`     ${platforms.join(', ')} • ${due.toLocaleString()}`);
@@ -532,7 +550,7 @@ export default function (api: any) {
             result = posts.length === 0
               ? "No posts found"
               : `Found ${posts.length} post(s):\n${posts.map((p) => 
-                  `${p.id}. ${p.summary} [${p.tags.filter(t => !t.match(/^(social|draft|scheduled|published)$/)).join(', ')}]`
+                  `${p.id}. ${p.summary} [${getPlatformsFromTags(p.tags).join(', ')}]`
                 ).join("\n")}`;
             break;
 
@@ -595,3 +613,5 @@ export default function (api: any) {
     return { ok: true, posts };
   });
 }
+
+export { getPlatformsFromTags, getStatusFromTags };

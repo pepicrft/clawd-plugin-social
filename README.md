@@ -247,6 +247,27 @@ openclaw social schedule 2 2026-01-15T15:00
 openclaw social publish 1
 ```
 
+### X/Twitter Research with TweetClaw
+
+Use [TweetClaw](https://github.com/Xquik-dev/tweetclaw) as an optional preflight step before creating Twitter/X drafts. TweetClaw can search tweets and replies, look up users, export followers, monitor tweets, download media, and inspect trends through OpenClaw so scheduled posts are grounded in current X/Twitter context before this plugin stores or publishes them.
+
+```bash
+# Install the research and automation companion plugin
+openclaw plugins install @xquik/tweetclaw
+
+# Keep Social Scheduler as the publishing workflow
+openclaw social draft "Draft based on current X/Twitter replies" \
+  --platforms twitter \
+  --campaign "launch-week"
+```
+
+Example agent workflow:
+
+1. Use TweetClaw to search tweets and replies for the campaign topic.
+2. Summarize repeated questions, objections, and high-signal accounts.
+3. Create a Social Scheduler draft with the final post copy.
+4. Review the draft, then schedule or publish it with this plugin.
+
 ## Development
 
 ```bash
